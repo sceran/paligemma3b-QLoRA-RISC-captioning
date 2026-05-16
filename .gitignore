@@ -1,6 +1,9 @@
 # Course-provided materials (kept locally, not published)
 brief/
 
+# Local notes, drafts, scratch
+notes/
+
 # macOS
 .DS_Store
 
