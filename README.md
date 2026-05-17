@@ -15,6 +15,12 @@ CIDEr improves **8.7× over the zero-shot baseline**. Evaluation is on 500 held-
 
 Full numerical results for every experiment are kept under [`results/`](results/) as JSON and CSV. The compiled 1-page IEEE report is [`Report.pdf`](Report.pdf); the LaTeX source is [`report.tex`](report.tex).
 
+## Qualitative examples
+
+![Qualitative comparison: five test images with ground truth, zero-shot baseline, and QLoRA fine-tuned predictions](results/qualitative.png)
+
+The baseline frequently falls back to generic phrases like *"satellite image of the city"* and *"aerial view of a house"*, while the fine-tuned model produces RISC-style descriptions using domain vocabulary such as *"residential"*, *"industrial"*, *"forest"*, and *"playground"*.
+
 ## Project scope
 
 The project goes beyond the assignment's required QLoRA + comparison and adds two ablations plus a base-model swap:
@@ -53,10 +59,15 @@ The Part 3 notebook is not committed to this public repo (kept local for the ODT
 ├── paligemma_qlora_risc.ipynb   Main notebook (Parts 1 and 2, all outputs preserved)
 ├── report.tex                   1-page IEEE report source
 ├── Report.pdf                   Compiled report
-├── qualitative.pdf              5-example baseline vs. fine-tuned comparison figure
 ├── docs/
 │   └── literature-survey.md     Upfront literature scan (informed design decisions)
-├── results/                     Raw metric outputs (JSON + CSV per experiment)
+├── results/
+│   ├── qualitative.pdf          5-example baseline vs. fine-tuned figure
+│   ├── qualitative.png          Same figure as PNG for inline display
+│   ├── results_after_peft_methods.json
+│   ├── results_part2_summary.csv
+│   ├── results_part3_pg2.json
+│   └── results_part3_pg2_vs_pg1.csv
 └── README.md                    This file
 ```
 
