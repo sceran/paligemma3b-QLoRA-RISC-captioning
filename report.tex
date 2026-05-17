@@ -1,0 +1,120 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+\begin{document}
+
+\title{Parameter-Efficient Fine-Tuning of PaliGemma\\for Remote Sensing Image Captioning}
+
+\author{\IEEEauthorblockN{S\"uleyman Ceran}
+\IEEEauthorblockA{\textit{Department of Data Informatics, METU}\\
+DI 725 Assignment 3\\
+suleymanceran33@gmail.com}
+\thanks{Code: \url{https://github.com/sceran/paligemma3b-QLoRA-RISC-captioning}.
+W\&B: \url{https://wandb.ai/sceran/paligemma3b-QLoRA-RISC}, \url{https://wandb.ai/sceran/huggingface}.}}
+
+\maketitle
+
+\begin{abstract}
+We apply QLoRA to PaliGemma-3B on the RISC remote-sensing captioning dataset, reaching CIDEr 2.21 from a zero-shot baseline of 0.25. Two ablations extend the baseline recipe: a caption-selection strategy comparison, and a cumulative PEFT method comparison across vanilla LoRA, rsLoRA, LoRA+, and DoRA. A short exploration swaps the base to PaliGemma 2 with an identical recipe. The cumulative ablation indicates that recent PEFT improvements do not stack monotonically on this domain, and that rsLoRA scaling alone is the strongest single intervention at a fixed 500-step budget.
+\end{abstract}
+
+\section{Introduction}
+
+Vision-language models perform well at captioning but adapting them to specialized domains is expensive. QLoRA \cite{dettmers2023qlora} addresses this with 4-bit base-weight quantization plus low-rank adapters \cite{hu2022lora}. We apply it to PaliGemma-3B \cite{beyer2024paligemma}, a SigLIP+Gemma VLM, on the RISC dataset of 44{,}521 satellite images each with five captions. Contributions: (i) a fine-tuned model with CIDEr 2.21 (8.7$\times$ baseline), (ii) caption-selection ablation, (iii) cumulative PEFT method comparison, (iv) a brief PaliGemma 2 swap under the same recipe.
+
+\section{Approach}
+
+The dataset is split image-level (seed 42) into 37{,}843 train, 2{,}226 val, 4{,}452 test. Captions are stored as five separate fields; one is sampled per training step (the \emph{random} strategy). We use \texttt{google/paligemma-3b-pt-224}; base weights are 4-bit NF4 with double quantization (bf16 compute). LoRA adapters of rank 16 with $\alpha{=}32$ and dropout 0.05 attach to the seven attention and MLP projection modules, giving 22.6M trainable parameters (0.77\%). The main run adds rsLoRA scaling $\alpha/\sqrt{r}$ \cite{kalajdzievski2023rslora} and LoRA+ \cite{hayou2024loraplus} with a $16{\times}$ asymmetric LR on the B matrices. AdamW at $10^{-4}$, batch 4 with gradient accumulation 4, gradient checkpointing, 3\% warmup, 1 epoch (2{,}366 steps). Ablations share the recipe and cap at 500 steps. Metrics use pycocoevalcap (multi-reference, all five captions).
+
+\section{Results}
+
+\textbf{Main result.} Table~\ref{tab:main} compares the pre-trained and fine-tuned models on 500 test images. CIDEr improves from 0.25 to 2.21; BLEU-4 from 0.04 to 0.58. Predictions shift from generic short outputs to longer, domain-specific captions (Fig.~\ref{fig:qualitative}).
+
+\begin{table}[t]
+\centering\small
+\caption{Baseline vs.\ QLoRA fine-tuned PaliGemma (500 test images).}
+\label{tab:main}
+\renewcommand{\arraystretch}{1.0}
+\begin{tabular}{lccccc}
+\toprule
+& BLEU-1 & BLEU-4 & METEOR & ROUGE-L & CIDEr \\
+\midrule
+Baseline       & 0.329 & 0.040 & 0.095 & 0.269 & 0.253 \\
+QLoRA tuned    & \textbf{0.853} & \textbf{0.585} & \textbf{0.409} & \textbf{0.750} & \textbf{2.207} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Caption strategy (Table~\ref{tab:caption}).} Random sampling beats picking only the first or longest caption. Concatenating all five into one target degrades the model into producing over-long outputs that the metric penalizes (CIDEr collapses to 0).
+
+\begin{table}[t]
+\centering\small
+\caption{Caption selection strategy (500 steps).}
+\label{tab:caption}
+\renewcommand{\arraystretch}{1.0}
+\begin{tabular}{lccc}
+\toprule
+Strategy & BLEU-4 & METEOR & CIDEr \\
+\midrule
+random  & 0.532 & 0.377 & \textbf{1.828} \\
+first   & 0.474 & 0.363 & 1.416 \\
+longest & 0.526 & \textbf{0.399} & 1.419 \\
+concat  & 0.323 & 0.337 & 0.000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Cumulative PEFT method ablation (Table~\ref{tab:peft}).} rsLoRA alone produces the highest CIDEr; the rsLoRA+LoRA+ stack trails rsLoRA alone; adding DoRA \cite{liu2024dora} recovers but does not surpass it. Two replicates of the same stack configuration (D and G) differ by 0.16 CIDEr, which we treat as an empirical inter-run variance floor; under this lens only rsLoRA marginally exceeds the noise band.
+
+\begin{table}[t]
+\centering\small
+\caption{Cumulative PEFT method ablation (500 steps each).}
+\label{tab:peft}
+\renewcommand{\arraystretch}{1.0}
+\begin{tabular}{lcc}
+\toprule
+Configuration & BLEU-4 & CIDEr \\
+\midrule
+A. Vanilla LoRA            & 0.528 & 1.932 \\
+B. rsLoRA only             & 0.513 & \textbf{2.090} \\
+C. LoRA+ only              & 0.514 & 1.903 \\
+D. rsLoRA + LoRA+ stack    & 0.532 & 1.828 \\
+E. + DoRA                  & 0.530 & 1.979 \\
+G. stack replicate         & 0.543 & 1.989 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{PaliGemma 2.} Running the rsLoRA-only configuration on PaliGemma 2 3B \cite{steiner2024paligemma2} yields CIDEr 2.095 vs.\ PG1's 2.090: a tie within the noise band. The PG2 zero-shot baseline is actually worse than PG1 (CIDEr 0.172 vs.\ 0.253), but fine-tuning closes the gap.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{qualitative.pdf}
+\caption{Five test images with reference, zero-shot baseline, and fine-tuned predictions. The fine-tuned model uses domain vocabulary (``runway'', ``residential'', ``parking'') the baseline omits.}
+\label{fig:qualitative}
+\end{figure}
+
+\section{Discussion and Conclusion}
+
+Two findings stand out. First, modern PEFT improvements do not stack monotonically on RISC at the 500-step budget; combined with the 0.16 CIDEr noise band from our replicates, vanilla LoRA is competitive when the learning rate is reasonable. Second, the base-model upgrade does not by itself buy quality on this domain: PG2 ties PG1 at a fixed budget, and the 1-epoch PG1 main run remains ahead of the 500-step PG2 run, so training duration outweighs the v1$\to$v2 choice. QLoRA delivered an 8.7$\times$ CIDEr gain with under 1\% of the model trainable. Future work: a full-epoch PG2 run, the instruction-tuned PG2 variant, and recent activation-driven initializations (EVA, CorDA) once their multimodal calibration paths stabilize.
+
+\begin{thebibliography}{9}
+\small
+\bibitem{hu2022lora} E.\ J.\ Hu et al., ``LoRA: Low-rank adaptation of large language models,'' \emph{ICLR}, 2022.
+\bibitem{dettmers2023qlora} T.\ Dettmers et al., ``QLoRA: Efficient finetuning of quantized LLMs,'' \emph{NeurIPS}, 2023.
+\bibitem{beyer2024paligemma} L.\ Beyer et al., ``PaliGemma: A versatile 3B VLM for transfer,'' \emph{arXiv:2407.07726}, 2024.
+\bibitem{steiner2024paligemma2} A.\ Steiner et al., ``PaliGemma 2,'' \emph{arXiv:2412.03555}, 2024.
+\bibitem{kalajdzievski2023rslora} D.\ Kalajdzievski, ``A rank stabilization scaling factor for LoRA,'' \emph{arXiv:2312.03732}, 2023.
+\bibitem{hayou2024loraplus} S.\ Hayou et al., ``LoRA+,'' \emph{ICML}, 2024.
+\bibitem{liu2024dora} S.\ Liu et al., ``DoRA: Weight-decomposed low-rank adaptation,'' \emph{ICML}, 2024.
+\end{thebibliography}
+
+\end{document}
